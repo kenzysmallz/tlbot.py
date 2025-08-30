@@ -1,9 +1,13 @@
+import os
 import time
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
-TOKEN = "8463771556:AAFUj7FlM2nzP1yiCjUPdboMzXEEYJ6nUz0"
+# Read token from environment variable
+TOKEN = os.getenv("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("No BOT_TOKEN found in environment variables")
 
 # In-memory user data
 user_data = {}
