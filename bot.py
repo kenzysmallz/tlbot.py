@@ -4,10 +4,9 @@ import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
-# Load token from Render Environment Variables
+# Get bot token and port from Render environment variables
 TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.environ.get("PORT", 5000))
-APP_URL = f"https://tlbot-00db.onrender.com/{TOKEN}"  # Your Render Web Service URL
 
 # In-memory user data
 user_data = {}
@@ -15,10 +14,7 @@ user_data = {}
 # Helper to get BTC price
 def get_btc_price():
     try:
-        r = requests.get(
-            "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-            timeout=8
-        )
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=8)
         return float(r.json()["bitcoin"]["usd"])
     except Exception:
         return 30000.0
@@ -45,12 +41,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     ensure_user(user_id)
 
-    # Handle referral
+    # Referral logic
     if context.args:
         referrer_id = context.args[0]
         if referrer_id != str(user_id):
             ensure_user(referrer_id)
-            user_data[referrer_id]["balance"] += 0.10 / get_btc_price()
+            user_data[referrer_id]["balance"] += 0.10 / get_btc_price()  # $0.10 in BTC
 
     await update.message.reply_text(
         "👋 Welcome to Telegram Bit Miner! 🚀\n"
@@ -139,20 +135,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Invalid input. Tap buttons below.", reply_markup=get_sidebar())
 
 # Main
-async def main():
+if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Webhook instead of polling
-    await app.run_webhook(
+    # Run webhook for Render free plan
+    app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
-        url_path=TOKEN,
-        webhook_url=APP_URL
+        webhook_url=f"https://tlbot-00db.onrender.com/{TOKEN}"  # Replace with your Render URL
     )
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
