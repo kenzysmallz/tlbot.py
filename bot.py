@@ -3,6 +3,7 @@ import time
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
+import asyncio
 
 # Read token from environment variable
 TOKEN = os.getenv("BOT_TOKEN")
@@ -42,12 +43,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     ensure_user(user_id)
 
-    # Check if someone started via referral
     if context.args:
         referrer_id = context.args[0]
-        if referrer_id != str(user_id):  # Prevent self-referral
+        if referrer_id != str(user_id):
             ensure_user(referrer_id)
-            user_data[referrer_id]["balance"] += 0.10 / get_btc_price()  # $0.10 in BTC
+            user_data[referrer_id]["balance"] += 0.10 / get_btc_price()
 
     await update.message.reply_text(
         "👋 Welcome to Telegram Bit Miner! 🚀\n"
@@ -64,7 +64,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user(user_id)
     data = user_data[user_id]
 
-    # Update balance based on elapsed time
     now = time.time()
     elapsed = now - data["last_check"]
     btc_per_2min = 0.5 / get_btc_price()
@@ -78,7 +77,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⛏ Mining runs automatically in background.\n💰 Earn $0.50 every 2 minutes.",
             reply_markup=get_sidebar()
         )
-
     elif query.data == "balance":
         progress_fraction = (elapsed % 120) / 120
         progress_steps = int(progress_fraction * 10)
@@ -89,7 +87,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⏱ Next credit in: {seconds_remaining} sec",
             reply_markup=get_sidebar()
         )
-
     elif query.data == "withdraw":
         if usd_balance < 500:
             await query.edit_message_text(f"⚠️ Minimum withdrawal is $500.\nBalance: ${usd_balance:.2f}", reply_markup=get_sidebar())
@@ -103,7 +100,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "After payment, press confirm:",
                 reply_markup=InlineKeyboardMarkup(kb)
             )
-
     elif query.data == "confirm_withdraw":
         fee_btc = 100 / get_btc_price()
         withdrawn = max(0.0, data["balance"] - fee_btc)
@@ -113,16 +109,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ Make sure you paid $100 fee first!",
             reply_markup=get_sidebar()
         )
-
     elif query.data == "add_wallet":
         await query.edit_message_text("💳 Please send your BTC wallet address.", reply_markup=get_sidebar())
-
     elif query.data == "about":
         await query.edit_message_text(
             "ℹ️ This is Telegram Bit Miner.\n💰 Earn $0.50 every 2 minutes continuously.\n⏳ You can mine for over a year!",
             reply_markup=get_sidebar()
         )
-
     elif query.data == "referral":
         referral_link = f"https://t.me/TLbitminerbot?start={user_id}"
         await query.edit_message_text(
@@ -131,7 +124,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_sidebar()
         )
 
-# Handle user sending wallet address
+# Handle user messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     ensure_user(user_id)
@@ -150,6 +143,11 @@ async def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     await app.run_polling()
 
+# Render-friendly event loop
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except RuntimeError:
+        # If event loop already running, use this
+        loop = asyncio.get_event_loop()
+        loop.create_task(main())
