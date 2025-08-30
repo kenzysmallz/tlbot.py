@@ -4,13 +4,9 @@ import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# Get bot token from environment variable
 TOKEN = os.getenv("BOT_TOKEN")
-
-# In-memory user data
 user_data = {}
 
-# Helper to get BTC price
 def get_btc_price():
     try:
         r = requests.get(
@@ -21,7 +17,6 @@ def get_btc_price():
     except Exception:
         return 30000.0
 
-# Sidebar / keyboard
 def get_sidebar():
     keyboard = [
         [InlineKeyboardButton("⛏ Mine", callback_data="mine")],
@@ -33,17 +28,13 @@ def get_sidebar():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# Ensure user exists
 def ensure_user(user_id):
     if user_id not in user_data:
         user_data[user_id] = {"balance": 0.0, "wallet": None, "last_check": time.time(), "referral_bonus": 0.0}
 
-# Start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     ensure_user(user_id)
-
-    # Check referral
     if context.args:
         referrer_id = context.args[0]
         if referrer_id != str(user_id):
@@ -57,14 +48,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_sidebar()
     )
 
-# Handle button presses
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
     ensure_user(user_id)
     data = user_data[user_id]
-
     now = time.time()
     elapsed = now - data["last_check"]
     btc_per_2min = 0.5 / get_btc_price()
@@ -74,58 +63,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usd_balance = data["balance"] * get_btc_price()
 
     if query.data == "mine":
-        await query.edit_message_text(
-            "⛏ Mining runs automatically in background.\n💰 Earn $0.50 every 2 minutes.",
-            reply_markup=get_sidebar()
-        )
+        await query.edit_message_text("⛏ Mining runs automatically.\n💰 Earn $0.50 every 2 minutes.", reply_markup=get_sidebar())
     elif query.data == "balance":
         progress_fraction = (elapsed % 120) / 120
         progress_steps = int(progress_fraction * 10)
         bar = "🔺" * progress_steps + "▫️" * (10 - progress_steps)
         seconds_remaining = max(0, int(120 - (elapsed % 120)))
         await query.edit_message_text(
-            f"📊 Balance:\n{bar}\n💰 {data['balance']:.6f} BTC (~${usd_balance:.2f})\n"
-            f"⏱ Next credit in: {seconds_remaining} sec",
-            reply_markup=get_sidebar()
-        )
-    elif query.data == "withdraw":
-        if usd_balance < 500:
-            await query.edit_message_text(f"⚠️ Minimum withdrawal is $500.\nBalance: ${usd_balance:.2f}", reply_markup=get_sidebar())
-        elif not data["wallet"]:
-            await query.edit_message_text("📥 No wallet found. Use Add Wallet first.", reply_markup=get_sidebar())
-        else:
-            fee_btc = 100 / get_btc_price()
-            kb = [[InlineKeyboardButton("Confirm Withdraw", callback_data="confirm_withdraw")]]
-            await query.edit_message_text(
-                f"📤 To withdraw, first pay a $100 fee ({fee_btc:.6f} BTC) to:\nbc1qrucwx02e0m8v4smp44ferp93ynvsaw277t088f\n"
-                "After payment, press confirm:",
-                reply_markup=InlineKeyboardMarkup(kb)
-            )
-    elif query.data == "confirm_withdraw":
-        fee_btc = 100 / get_btc_price()
-        withdrawn = max(0.0, data["balance"] - fee_btc)
-        data["balance"] = 0.0
-        await query.edit_message_text(
-            f"✅ Withdrawal successful!\nAmount sent: {withdrawn:.6f} BTC\nWallet: {data['wallet']}\n💰 New balance: 0 BTC\n\n"
-            "⚠️ Make sure you paid $100 fee first!",
+            f"📊 Balance:\n{bar}\n💰 {data['balance']:.6f} BTC (~${usd_balance:.2f})\n⏱ Next credit in: {seconds_remaining} sec",
             reply_markup=get_sidebar()
         )
     elif query.data == "add_wallet":
         await query.edit_message_text("💳 Please send your BTC wallet address.", reply_markup=get_sidebar())
-    elif query.data == "about":
-        await query.edit_message_text(
-            "ℹ️ This is Telegram Bit Miner.\n💰 Earn $0.50 every 2 minutes continuously.\n⏳ You can mine for over a year!",
-            reply_markup=get_sidebar()
-        )
-    elif query.data == "referral":
-        referral_link = f"https://t.me/TLbitminerbot?start={user_id}"
-        await query.edit_message_text(
-            f"👥 Invite friends and earn extra!\n💰 You'll earn $0.10 for every user that uses your referral link.\n\n"
-            f"Here is your referral link:\n{referral_link}",
-            reply_markup=get_sidebar()
-        )
 
-# Handle messages (wallets)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     ensure_user(user_id)
@@ -136,16 +86,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("⚠️ Invalid input. Tap buttons below.", reply_markup=get_sidebar())
 
-# Main
-async def main():
+def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    await app.start()          # Start the bot
-    await app.updater.start_polling()  # Pure polling, no port needed
-    await app.updater.idle()
+    # Just run polling — handles initialize/start automatically
+    app.run_polling()
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    main()
