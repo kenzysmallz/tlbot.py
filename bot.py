@@ -1,9 +1,8 @@
 import os
 import time
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
-import asyncio
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 # Read token from environment variable
 TOKEN = os.getenv("BOT_TOKEN")
@@ -135,19 +134,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("⚠️ Invalid input. Tap buttons below.", reply_markup=get_sidebar())
 
-# Main
-async def main():
+# === Render-friendly entry point ===
+if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    await app.run_polling()
-
-# Render-friendly event loop
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except RuntimeError:
-        # If event loop already running, use this
-        loop = asyncio.get_event_loop()
-        loop.create_task(main())
+    # Use built-in synchronous run_polling() to avoid asyncio loop issues
+    app.run_polling()
