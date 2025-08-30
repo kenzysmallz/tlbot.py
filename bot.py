@@ -2,11 +2,10 @@ import os
 import time
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# Get bot token and port from Render environment variables
+# Get bot token from environment variable
 TOKEN = os.getenv("BOT_TOKEN")
-PORT = int(os.environ.get("PORT", 5000))
 
 # In-memory user data
 user_data = {}
@@ -14,7 +13,10 @@ user_data = {}
 # Helper to get BTC price
 def get_btc_price():
     try:
-        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=8)
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+            timeout=8
+        )
         return float(r.json()["bitcoin"]["usd"])
     except Exception:
         return 30000.0
@@ -41,12 +43,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     ensure_user(user_id)
 
-    # Referral logic
+    # Check referral
     if context.args:
         referrer_id = context.args[0]
         if referrer_id != str(user_id):
             ensure_user(referrer_id)
-            user_data[referrer_id]["balance"] += 0.10 / get_btc_price()  # $0.10 in BTC
+            user_data[referrer_id]["balance"] += 0.10 / get_btc_price()
 
     await update.message.reply_text(
         "👋 Welcome to Telegram Bit Miner! 🚀\n"
@@ -123,7 +125,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_sidebar()
         )
 
-# Handle user sending wallet address
+# Handle messages (wallets)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     ensure_user(user_id)
@@ -135,15 +137,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Invalid input. Tap buttons below.", reply_markup=get_sidebar())
 
 # Main
-if __name__ == "__main__":
+async def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    await app.start()          # Start the bot
+    await app.updater.start_polling()  # Pure polling, no port needed
+    await app.updater.idle()
 
-    # Run webhook for Render free plan
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        webhook_url=f"https://tlbot-00db.onrender.com/{TOKEN}"  # Replace with your Render URL
-    )
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
